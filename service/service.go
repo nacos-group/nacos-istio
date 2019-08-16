@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"istio.io/api/networking/v1alpha3"
-	"istio.io/istio/pilot/pkg/model"
 	"log"
 	"net"
 	"strconv"
@@ -189,11 +188,6 @@ func (mcps *mcpStream) Process(s *AdsService, con *Connection, msg proto.Message
 
 	rtype := req.Collection
 
-	if rtype != model.ServiceEntry.Collection {
-		log.Println("Unsupported collection type:", rtype)
-		return nil
-	}
-
 	if req.ErrorDetail != nil && req.ErrorDetail.Message != "" {
 		nacks.With(prometheus.Labels{"node": con.NodeID, "type": rtype}).Add(1)
 		log.Println("NACK: ", con.NodeID, rtype, req.ErrorDetail)
@@ -226,24 +220,15 @@ func (mcps *mcpStream) Process(s *AdsService, con *Connection, msg proto.Message
 		}
 	}
 
-	rs1, _ := convertServiceEntriesToResource("test.1.nacos.local", getServiceFromNacos("test.1.nacos.local"))
-
-	rs2, _ := convertServiceEntriesToResource("test.2.nacos.local", getServiceFromNacos("test.2.nacos.local"))
-
-	msg = &mcp.Resources{
-		Collection:  model.ServiceEntry.Collection,
-		Resources:   []mcp.Resource{*rs1, *rs2},
-		Incremental: false,
-	}
-
-	log.Println("Sending resources to Pilot.")
-
-	if err := con.Stream.Send(msg); err != nil {
-		log.Fatalln(err, status.Code(err))
+	// Blocking - read will continue
+	err := s.push(con, rtype, nil)
+	if err != nil {
+		// push failed - disconnect
+		log.Println("Closing connection ", err)
 		return err
 	}
 
-	return nil
+	return err
 }
 
 func (s *AdsService) EstablishResourceStream(mcps mcp.ResourceSource_EstablishResourceStreamServer) error {
@@ -357,20 +342,18 @@ func (s *AdsService) connectionID(node string) string {
 
 func getServiceFromNacos(name string) (sh map[string][]*v1alpha3.ServiceEntry) {
 
-	var endpoint = &v1alpha3.ServiceEntry_Endpoint{
-		Address: "1.1.1.1",
+	ports := map[string]uint32{
+		fmt.Sprintf("port-%d", 8848): uint32(8848),
 	}
 
-	var port = &v1alpha3.Port{
-		Number:   8080,
-		Protocol: "HTTP",
-		Name:     "http",
+	var endpoint = &v1alpha3.ServiceEntry_Endpoint{
+		Address: "127.0.0.1",
+		Ports:   ports,
 	}
 
 	serviceEntry := &v1alpha3.ServiceEntry{
-		Hosts:     []string{name},
+		Hosts:     []string{name + ".nacos"},
 		Endpoints: []*v1alpha3.ServiceEntry_Endpoint{endpoint},
-		Ports:     []*v1alpha3.Port{port},
 	}
 
 	sh = make(map[string][]*v1alpha3.ServiceEntry)

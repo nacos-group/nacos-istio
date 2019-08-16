@@ -34,18 +34,22 @@ func init() {
 
 // Called to request push of endpoints in ServiceEntry format
 func sePush(s *AdsService, con *Connection, rtype string, res []string) error {
-	log.Print("SE request ", rtype, res)
+	log.Println("SE request ", rtype, res)
 
 	r := &v1alpha1.Resources{}
 	r.Collection = ServiceEntriesType // must match
-	for hostname, sh := range ep.seShards {
-		res, err := convertServiceEntriesToResource(hostname, sh)
-		if err != nil {
-			return err
-		}
-		r.Resources = append(r.Resources, *res)
 
-	}
+	rs1, _ := convertServiceEntriesToResource("test-1", getServiceFromNacos("test-1.nacos"))
+
+	r.Resources = append(r.Resources, *rs1)
+
+	rs2, _ := convertServiceEntriesToResource("test-2", getServiceFromNacos("test-2.nacos"))
+
+	r.Resources = append(r.Resources, *rs2)
+
+	rs3, _ := convertServiceEntriesToResource("test-3", getServiceFromNacos("test-3.nacos"))
+
+	r.Resources = append(r.Resources, *rs3)
 
 	return s.Send(con, rtype, r)
 }
@@ -101,7 +105,7 @@ func convertServiceEntriesToResource(hostname string, sh map[string][]*v1alpha3.
 	name := hostParts[0]
 	var namespace string
 	if len(hostParts) == 1 {
-		namespace = "consul"
+		namespace = "nacos"
 	} else {
 		namespace = hostParts[1]
 	}
