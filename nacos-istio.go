@@ -8,7 +8,7 @@ import (
 )
 
 var (
-	nacosServer = flag.String("consul", "127.0.0.1:8848", "Address of Nacos server")
+	nacosServer = flag.String("nacos", "127.0.0.1:8848", "Address of Nacos server")
 
 	grpcAddr = flag.String("grpcAddr", ":18848", "Address of the MCP server")
 

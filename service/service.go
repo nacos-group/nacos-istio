@@ -351,9 +351,18 @@ func getServiceFromNacos(name string) (sh map[string][]*v1alpha3.ServiceEntry) {
 		Ports:   ports,
 	}
 
+	port := &v1alpha3.Port{
+		Number:   8848,
+		Protocol: "TCP",
+		Name:     "tcp",
+	}
+
 	serviceEntry := &v1alpha3.ServiceEntry{
-		Hosts:     []string{name + ".nacos"},
-		Endpoints: []*v1alpha3.ServiceEntry_Endpoint{endpoint},
+		Hosts:      []string{name + ".nacos"},
+		Addresses:  []string{"1.2.3.4"},
+		Ports:      []*v1alpha3.Port{port},
+		Resolution: v1alpha3.ServiceEntry_STATIC,
+		Endpoints:  []*v1alpha3.ServiceEntry_Endpoint{endpoint},
 	}
 
 	sh = make(map[string][]*v1alpha3.ServiceEntry)
