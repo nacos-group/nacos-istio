@@ -1,4 +1,4 @@
-package nacos_mcp_server
+package server
 
 import (
 	"io"

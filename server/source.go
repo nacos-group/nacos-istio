@@ -1,4 +1,4 @@
-package nacos_mcp_server
+package server
 
 import (
 	"context"
@@ -11,7 +11,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/peer"
 
-	"./internal"
+	"github.com/nkorange/nacos-istio/internal"
 	mcp "istio.io/api/mcp/v1alpha1"
 	"istio.io/istio/pkg/mcp/monitoring"
 	"istio.io/istio/pkg/mcp/rate"
