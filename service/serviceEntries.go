@@ -39,17 +39,9 @@ func sePush(s *AdsService, con *Connection, rtype string, res []string) error {
 	r := &v1alpha1.Resources{}
 	r.Collection = ServiceEntriesType // must match
 
-	rs1, _ := convertServiceEntriesToResource("test-1.nacos", getServiceFromNacos("test-1"))
+	rs1, _ := convertServiceEntriesToResource("test2.nacos", getServiceFromNacos("test2"))
 
 	r.Resources = append(r.Resources, *rs1)
-
-	rs2, _ := convertServiceEntriesToResource("test-2.nacos", getServiceFromNacos("test-2"))
-
-	r.Resources = append(r.Resources, *rs2)
-
-	rs3, _ := convertServiceEntriesToResource("test-3.nacos", getServiceFromNacos("test-3"))
-
-	r.Resources = append(r.Resources, *rs3)
 
 	return s.Send(con, rtype, r)
 }
@@ -111,17 +103,30 @@ func convertServiceEntriesToResource(hostname string, sh map[string][]*v1alpha3.
 	}
 
 	se := &v1alpha3.ServiceEntry{
-		Hosts:     []string{hostname},
-		Addresses: sh[name][0].Addresses,
-		Ports:     sh[name][0].Ports,
-		//Resolution: v1alpha3.ServiceEntry_STATIC,
+		Hosts:      []string{hostname},
+		Addresses:  sh[name][0].Addresses,
+		Ports:      sh[name][0].Ports,
+		Location:   0,
+		Resolution: 2,
 	}
 
-	for _, serviceEntriesShard := range sh {
-		for _, se := range serviceEntriesShard {
-			se.Endpoints = append(se.Endpoints, se.Endpoints...)
-		}
+	ports := map[string]uint32{
+		"http": uint32(80),
 	}
+
+	var endpoint = &v1alpha3.ServiceEntry_Endpoint{
+		Address: "1.2.3.4",
+		Ports:   ports,
+		Weight:  1,
+	}
+
+	se.Endpoints = append(se.Endpoints, endpoint)
+
+	//for _, serviceEntriesShard := range sh {
+	//	for _, se := range serviceEntriesShard {
+	//		se.Endpoints = append(se.Endpoints, se.Endpoints...)
+	//	}
+	//}
 
 	seAny, err := types.MarshalAny(se)
 	if err != nil {

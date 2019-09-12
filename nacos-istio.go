@@ -1,8 +1,8 @@
 package main
 
 import (
+	"./service"
 	"flag"
-	"github.com/nkorange/nacos-istio/service"
 	"log"
 	"net/http"
 )

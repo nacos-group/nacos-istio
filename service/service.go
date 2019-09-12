@@ -343,26 +343,28 @@ func (s *AdsService) connectionID(node string) string {
 func getServiceFromNacos(name string) (sh map[string][]*v1alpha3.ServiceEntry) {
 
 	ports := map[string]uint32{
-		fmt.Sprintf("port-%d", 8848): uint32(8848),
+		"http": uint32(80),
 	}
 
 	var endpoint = &v1alpha3.ServiceEntry_Endpoint{
-		Address: "127.0.0.1",
+		Address: "1.2.3.4",
 		Ports:   ports,
+		Weight:  1,
 	}
 
 	port := &v1alpha3.Port{
-		Number:   8848,
-		Protocol: "TCP",
-		Name:     "tcp",
+		Number:   80,
+		Protocol: "HTTP",
+		Name:     "http",
 	}
 
 	serviceEntry := &v1alpha3.ServiceEntry{
 		Hosts:      []string{name + ".nacos"},
 		Addresses:  []string{"1.2.3.4"},
 		Ports:      []*v1alpha3.Port{port},
-		Resolution: v1alpha3.ServiceEntry_STATIC,
+		Resolution: v1alpha3.ServiceEntry_DNS,
 		Endpoints:  []*v1alpha3.ServiceEntry_Endpoint{endpoint},
+		Location:   1,
 	}
 
 	sh = make(map[string][]*v1alpha3.ServiceEntry)
