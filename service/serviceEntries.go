@@ -33,7 +33,7 @@ func init() {
 }
 
 // Called to request push of endpoints in ServiceEntry format
-func sePush(s *AdsService, con *Connection, rtype string, res []string) error {
+func sePush(s *NacosMcpService, con *Connection, rtype string, res []string) error {
 	log.Println("SE request ", rtype, res)
 
 	r := &v1alpha1.Resources{}
@@ -47,13 +47,13 @@ func sePush(s *AdsService, con *Connection, rtype string, res []string) error {
 }
 
 // Called to request push of ClusterLoadAssignments (EDS) - same information, but in Envoy format
-func edsPush(s *AdsService, con *Connection, rtype string, res []string) error {
+func edsPush(s *NacosMcpService, con *Connection, rtype string, res []string) error {
 	// TODO.
 	return nil
 }
 
 // Called when a new endpoint is added to a shard.
-func (fx *AdsService) ServiceEntriesUpdate(shard, hostname string, entry []*v1alpha3.ServiceEntry) error {
+func (fx *NacosMcpService) ServiceEntriesUpdate(shard, hostname string, entry []*v1alpha3.ServiceEntry) error {
 	ep.mutex.Lock()
 	defer ep.mutex.Unlock()
 
@@ -149,12 +149,12 @@ func convertServiceEntriesToResource(hostname string, sh map[string][]*v1alpha3.
 }
 
 // Called on pod events.
-func (fx *AdsService) WorkloadUpdate(id string, labels map[string]string, annotations map[string]string) {
+func (fx *NacosMcpService) WorkloadUpdate(id string, labels map[string]string, annotations map[string]string) {
 	// update-Running seems to be readiness check ?
 	log.Println("PodUpdate ", id, labels, annotations)
 }
 
-func (*AdsService) ConfigUpdate(bool) {
+func (*NacosMcpService) ConfigUpdate(bool) {
 	//log.Println("ConfigUpdate")
 }
 
@@ -164,6 +164,6 @@ func (*AdsService) ConfigUpdate(bool) {
 // This interface is WIP - labels, annotations and other changes to service may be
 // updated to force a EDS and CDS recomputation and incremental push, as it doesn't affect
 // LDS/RDS.
-func (fx *AdsService) SvcUpdate(shard, hostname string, ports map[string]uint32, rports map[uint32]string) {
+func (fx *NacosMcpService) SvcUpdate(shard, hostname string, ports map[string]uint32, rports map[uint32]string) {
 	log.Println("ConfigUpdate")
 }

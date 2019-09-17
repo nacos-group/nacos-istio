@@ -1,9 +1,13 @@
 package service
 
 import (
+	"../nacos"
 	"context"
 	"errors"
 	"fmt"
+	"github.com/gogo/protobuf/types"
+	"github.com/nacos-group/nacos-sdk-go/model"
+	"github.com/nacos-group/nacos-sdk-go/utils"
 	"io"
 	"istio.io/api/networking/v1alpha3"
 	"log"
@@ -12,7 +16,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/envoyproxy/go-control-plane/envoy/api/v2"
 	ads "github.com/envoyproxy/go-control-plane/envoy/service/discovery/v2"
 	"github.com/gogo/protobuf/proto"
 	middleware "github.com/grpc-ecosystem/go-grpc-middleware"
@@ -42,28 +45,22 @@ var (
 
 // typeHandler is called when a request for a type is first received.
 // It should send the list of resources on the connection.
-type typeHandler func(s *AdsService, con *Connection, rtype string, res []string) error
+type typeHandler func(s *NacosMcpService, con *Connection, rtype string, res []string) error
 
 //
-type AdsService struct {
+type NacosMcpService struct {
 	grpcServer *grpc.Server
 
 	// mutex used to modify structs, non-blocking code only.
 	mutex sync.RWMutex
 
-	// clients reflect active gRPC channels, for both ADS and MCP.
+	// clients reflect active gRPC channels.
 	// key is Connection.ConID
 	clients map[string]*Connection
 
 	connectionNumber int
-}
 
-func (s *AdsService) StreamSecrets(ads.SecretDiscoveryService_StreamSecretsServer) error {
-	return nil
-}
-
-func (s *AdsService) FetchSecrets(context.Context, *v2.DiscoveryRequest) (*v2.DiscoveryResponse, error) {
-	return nil, nil
+	nacosPushService nacos.NacosService
 }
 
 type Connection struct {
@@ -90,7 +87,8 @@ type Connection struct {
 	// Watched resources for the connection
 	Watched map[string][]string
 
-	NonceSent  map[string]string
+	NonceSent map[string]string
+
 	NonceAcked map[string]string
 
 	// Only one can be set.
@@ -99,24 +97,37 @@ type Connection struct {
 	active bool
 }
 
-// NewService initialized MCP and ADS servers.
-func NewService(addr string) *AdsService {
-	adss := &AdsService{
+// NewService initialized MCP servers.
+func NewService(addr string) *NacosMcpService {
+
+	nacosMcpService := &NacosMcpService{
 		clients: map[string]*Connection{},
 	}
 
-	adss.initGrpcServer()
+	nacosMcpService.initGrpcServer()
 
-	mcp.RegisterResourceSourceServer(adss.grpcServer, adss)
+	mcp.RegisterResourceSourceServer(nacosMcpService.grpcServer, nacosMcpService)
 
 	lis, err := net.Listen("tcp", addr)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	go adss.grpcServer.Serve(lis)
+	_ := nacosMcpService.nacosPushService.SubscribeAllServices(func(services map[string][]model.SubscribeService, err error) {
 
-	return adss
+		if err != nil {
+			log.Println("subscribe error", err)
+			return
+		}
+
+		nacosMcpService.SendAll(convert2McpResources(services))
+
+		log.Printf("\n\n callback return services:%s \n\n", utils.ToJsonString(services))
+	})
+
+	go nacosMcpService.grpcServer.Serve(lis)
+
+	return nacosMcpService
 }
 
 type Stream interface {
@@ -126,7 +137,8 @@ type Stream interface {
 	Recv() (proto.Message, error)
 
 	Context() context.Context
-	Process(s *AdsService, con *Connection, message proto.Message) error
+
+	Process(s *NacosMcpService, con *Connection, message proto.Message) error
 }
 
 type mcpStream struct {
@@ -154,12 +166,55 @@ func (mcps *mcpStream) Context() context.Context {
 	return context.Background()
 }
 
+// Convert all Nacos services to MCP resources:
+func convert2McpResources(services map[string][]model.SubscribeService) (r *v1alpha1.Resources) {
+
+	resources := &v1alpha1.Resources{}
+
+	for serviceName, instances := range services {
+
+		se := &v1alpha3.ServiceEntry{
+			Hosts: []string{serviceName},
+		}
+
+		for _, instance := range instances {
+
+			endpoint := &v1alpha3.ServiceEntry_Endpoint{}
+
+			endpoint.Address = instance.Ip
+			endpoint.Ports = map[string]uint32{
+				"http": uint32(instance.Port),
+			}
+
+			se.Endpoints = append(se.Endpoints, endpoint)
+		}
+
+		seAny, err := types.MarshalAny(se)
+		if err != nil {
+			continue
+		}
+
+		res := v1alpha1.Resource{
+			Body: seAny,
+			Metadata: &v1alpha1.Metadata{
+				Annotations: map[string]string{
+					"virtual": "1",
+				},
+				Name: "nacos" + "/" + serviceName, // goes to model.Config.Name and Namespace - of course different syntax
+			},
+		}
+		resources.Resources = append(resources.Resources, res)
+
+	}
+	return resources
+}
+
 // Compared with ADS:
 //  req.Node -> req.SinkNode
 //  metadata struct -> Annotations
 //  TypeUrl -> Collection
 //  no on-demand (Watched)
-func (mcps *mcpStream) Process(s *AdsService, con *Connection, msg proto.Message) error {
+func (mcps *mcpStream) Process(s *NacosMcpService, con *Connection, msg proto.Message) error {
 
 	log.Println("Start process MCP stream")
 
@@ -231,7 +286,7 @@ func (mcps *mcpStream) Process(s *AdsService, con *Connection, msg proto.Message
 	return err
 }
 
-func (s *AdsService) EstablishResourceStream(mcps mcp.ResourceSource_EstablishResourceStreamServer) error {
+func (s *NacosMcpService) EstablishResourceStream(mcps mcp.ResourceSource_EstablishResourceStreamServer) error {
 
 	log.Println("establish resource stream.....")
 
@@ -266,7 +321,7 @@ func (s *AdsService) EstablishResourceStream(mcps mcp.ResourceSource_EstablishRe
 }
 
 // Push a single resource type on the connection. This is blocking.
-func (s *AdsService) push(con *Connection, rtype string, res []string) error {
+func (s *NacosMcpService) push(con *Connection, rtype string, res []string) error {
 	h, f := resourceHandler[rtype]
 	if !f {
 		// TODO: push some 'not found'
@@ -280,19 +335,19 @@ func (s *AdsService) push(con *Connection, rtype string, res []string) error {
 }
 
 // IncrementalAggregatedResources is not implemented.
-func (s *AdsService) DeltaAggregatedResources(stream ads.AggregatedDiscoveryService_DeltaAggregatedResourcesServer) error {
+func (s *NacosMcpService) DeltaAggregatedResources(stream ads.AggregatedDiscoveryService_DeltaAggregatedResourcesServer) error {
 	return status.Errorf(codes.Unimplemented, "not implemented")
 }
 
 // Callbacks from the lower layer
 
-func (s *AdsService) initGrpcServer() {
+func (s *NacosMcpService) initGrpcServer() {
 	grpcOptions := s.grpcServerOptions()
 	s.grpcServer = grpc.NewServer(grpcOptions...)
 
 }
 
-func (s *AdsService) grpcServerOptions() []grpc.ServerOption {
+func (s *NacosMcpService) grpcServerOptions() []grpc.ServerOption {
 	interceptors := []grpc.UnaryServerInterceptor{
 		// setup server prometheus monitoring (as final interceptor in chain)
 		grpcprometheus.UnaryServerInterceptor,
@@ -315,7 +370,7 @@ func (s *AdsService) grpcServerOptions() []grpc.ServerOption {
 	return grpcOptions
 }
 
-func (fx *AdsService) SendAll(r *v1alpha1.Resources) {
+func (fx *NacosMcpService) SendAll(r *v1alpha1.Resources) {
 	for _, con := range fx.clients {
 		// TODO: only if watching our resource type
 
@@ -326,13 +381,13 @@ func (fx *AdsService) SendAll(r *v1alpha1.Resources) {
 
 }
 
-func (fx *AdsService) Send(con *Connection, rtype string, r *v1alpha1.Resources) error {
+func (fx *NacosMcpService) Send(con *Connection, rtype string, r *v1alpha1.Resources) error {
 	r.Nonce = fmt.Sprintf("%v", time.Now())
 	con.NonceSent[rtype] = r.Nonce
 	return con.Stream.Send(r)
 }
 
-func (s *AdsService) connectionID(node string) string {
+func (s *NacosMcpService) connectionID(node string) string {
 	s.mutex.Lock()
 	s.connectionNumber++
 	c := s.connectionNumber
