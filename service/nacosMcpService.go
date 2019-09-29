@@ -1,13 +1,11 @@
 package service
 
 import (
+	"../common"
 	"../nacos"
 	"context"
 	"errors"
 	"fmt"
-	"github.com/gogo/protobuf/types"
-	"github.com/nacos-group/nacos-sdk-go/model"
-	"github.com/nacos-group/nacos-sdk-go/utils"
 	"io"
 	"istio.io/api/networking/v1alpha3"
 	"log"
@@ -60,7 +58,7 @@ type NacosMcpService struct {
 
 	connectionNumber int
 
-	nacosPushService nacos.NacosService
+	nacosPushService *nacos.MockNacosService
 }
 
 type Connection struct {
@@ -95,13 +93,28 @@ type Connection struct {
 	Stream Stream
 
 	active bool
+
+	LastRequestAcked bool
+
+	LastRequestTime int64
 }
 
 // NewService initialized MCP servers.
-func NewService(addr string) *NacosMcpService {
+func NewService(addr string, mockParams common.MockParams) *NacosMcpService {
+
+	// default is mocked:
+	pushService := &nacos.MockNacosService{
+		MockParams: mockParams,
+	}
+
+	if mockParams.Mocked {
+		pushService = nacos.NewMockNacosService(mockParams)
+	}
 
 	nacosMcpService := &NacosMcpService{
 		clients: map[string]*Connection{},
+		// Use Mock service :
+		nacosPushService: pushService,
 	}
 
 	nacosMcpService.initGrpcServer()
@@ -113,16 +126,25 @@ func NewService(addr string) *NacosMcpService {
 		log.Fatal(err)
 	}
 
-	_ := nacosMcpService.nacosPushService.SubscribeAllServices(func(services map[string][]model.SubscribeService, err error) {
+	nacosMcpService.nacosPushService.SubscribeAllServices(func(resources *v1alpha1.Resources, err error) {
 
 		if err != nil {
 			log.Println("subscribe error", err)
 			return
 		}
 
-		nacosMcpService.SendAll(convert2McpResources(services))
+		if len(nacosMcpService.clients) == 0 {
+			return
+		}
 
-		log.Printf("\n\n callback return services:%s \n\n", utils.ToJsonString(services))
+		if nacosMcpService.clients["-1"].LastRequestAcked == false {
+			log.Println("Last request not finished, ignore.")
+			return
+		}
+
+		nacosMcpService.clients["-1"].LastRequestTime = time.Now().UnixNano() / 1000
+		nacosMcpService.clients["-1"].LastRequestAcked = false
+		nacosMcpService.SendAll(resources)
 	})
 
 	go nacosMcpService.grpcServer.Serve(lis)
@@ -166,57 +188,12 @@ func (mcps *mcpStream) Context() context.Context {
 	return context.Background()
 }
 
-// Convert all Nacos services to MCP resources:
-func convert2McpResources(services map[string][]model.SubscribeService) (r *v1alpha1.Resources) {
-
-	resources := &v1alpha1.Resources{}
-
-	for serviceName, instances := range services {
-
-		se := &v1alpha3.ServiceEntry{
-			Hosts: []string{serviceName},
-		}
-
-		for _, instance := range instances {
-
-			endpoint := &v1alpha3.ServiceEntry_Endpoint{}
-
-			endpoint.Address = instance.Ip
-			endpoint.Ports = map[string]uint32{
-				"http": uint32(instance.Port),
-			}
-
-			se.Endpoints = append(se.Endpoints, endpoint)
-		}
-
-		seAny, err := types.MarshalAny(se)
-		if err != nil {
-			continue
-		}
-
-		res := v1alpha1.Resource{
-			Body: seAny,
-			Metadata: &v1alpha1.Metadata{
-				Annotations: map[string]string{
-					"virtual": "1",
-				},
-				Name: "nacos" + "/" + serviceName, // goes to model.Config.Name and Namespace - of course different syntax
-			},
-		}
-		resources.Resources = append(resources.Resources, res)
-
-	}
-	return resources
-}
-
 // Compared with ADS:
 //  req.Node -> req.SinkNode
 //  metadata struct -> Annotations
 //  TypeUrl -> Collection
 //  no on-demand (Watched)
 func (mcps *mcpStream) Process(s *NacosMcpService, con *Connection, msg proto.Message) error {
-
-	log.Println("Start process MCP stream")
 
 	req := msg.(*mcp.RequestResources)
 	if !con.active {
@@ -254,6 +231,7 @@ func (mcps *mcpStream) Process(s *NacosMcpService, con *Connection, msg proto.Me
 		con.NonceAcked[rtype] = req.ResponseNonce
 		con.mu.Unlock()
 		acks.With(prometheus.Labels{"type": rtype}).Add(1)
+		log.Println("error", req.ErrorDetail)
 		return nil
 	}
 
@@ -264,6 +242,10 @@ func (mcps *mcpStream) Process(s *NacosMcpService, con *Connection, msg proto.Me
 		con.mu.Unlock()
 
 		if lastNonce == req.ResponseNonce {
+
+			log.Println("ACK of:", con.LastRequestTime, " used time(microsecond):", time.Now().UnixNano()/1000-con.LastRequestTime, "\n")
+			con.LastRequestAcked = true
+
 			acks.With(prometheus.Labels{"type": rtype}).Add(1)
 			con.mu.Lock()
 			con.NonceAcked[rtype] = req.ResponseNonce
@@ -274,16 +256,20 @@ func (mcps *mcpStream) Process(s *NacosMcpService, con *Connection, msg proto.Me
 			log.Println("Unmatching nonce ", req.ResponseNonce, lastNonce)
 		}
 	}
+	//
+	//// Blocking - read will continue
+	//err := s.push(con, rtype, nil)
+	//if err != nil {
+	//	// push failed - disconnect
+	//	log.Println("Closing connection ", err)
+	//	return err
+	//}
 
-	// Blocking - read will continue
-	err := s.push(con, rtype, nil)
-	if err != nil {
-		// push failed - disconnect
-		log.Println("Closing connection ", err)
-		return err
-	}
+	return nil
+}
 
-	return err
+func (s *NacosMcpService) getAllResources() (r *v1alpha1.Resources) {
+	return s.nacosPushService.Resources
 }
 
 func (s *NacosMcpService) EstablishResourceStream(mcps mcp.ResourceSource_EstablishResourceStreamServer) error {
@@ -293,12 +279,13 @@ func (s *NacosMcpService) EstablishResourceStream(mcps mcp.ResourceSource_Establ
 	stream := &mcpStream{stream: mcps}
 
 	con := &Connection{
-		Stream:      stream,
-		NonceSent:   map[string]string{},
-		Metadata:    map[string]string{},
-		Watched:     map[string][]string{},
-		NonceAcked:  map[string]string{},
-		doneChannel: make(chan int, 2),
+		Stream:           stream,
+		NonceSent:        map[string]string{},
+		Metadata:         map[string]string{},
+		Watched:          map[string][]string{},
+		NonceAcked:       map[string]string{},
+		doneChannel:      make(chan int, 2),
+		LastRequestAcked: true,
 	}
 
 	for {
@@ -323,6 +310,7 @@ func (s *NacosMcpService) EstablishResourceStream(mcps mcp.ResourceSource_Establ
 // Push a single resource type on the connection. This is blocking.
 func (s *NacosMcpService) push(con *Connection, rtype string, res []string) error {
 	h, f := resourceHandler[rtype]
+	log.Println("push", rtype, f)
 	if !f {
 		// TODO: push some 'not found'
 		log.Println("Resource not found ", rtype)
@@ -371,9 +359,10 @@ func (s *NacosMcpService) grpcServerOptions() []grpc.ServerOption {
 }
 
 func (fx *NacosMcpService) SendAll(r *v1alpha1.Resources) {
-	for _, con := range fx.clients {
-		// TODO: only if watching our resource type
 
+	//log.Println("current clients", fx.clients)
+	for _, con := range fx.clients {
+		log.Println("sending resources", len(r.Resources), con.LastRequestTime)
 		r.Nonce = fmt.Sprintf("%v", time.Now())
 		con.NonceSent[r.Collection] = r.Nonce
 		con.Stream.Send(r)
@@ -384,6 +373,9 @@ func (fx *NacosMcpService) SendAll(r *v1alpha1.Resources) {
 func (fx *NacosMcpService) Send(con *Connection, rtype string, r *v1alpha1.Resources) error {
 	r.Nonce = fmt.Sprintf("%v", time.Now())
 	con.NonceSent[rtype] = r.Nonce
+
+	log.Println("sending resources", r)
+
 	return con.Stream.Send(r)
 }
 

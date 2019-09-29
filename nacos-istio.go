@@ -1,6 +1,7 @@
 package main
 
 import (
+	"./common"
 	"./service"
 	"flag"
 	"log"
@@ -17,9 +18,26 @@ var (
 
 func main() {
 
-	a := service.NewService(*grpcAddr)
+	mocked := flag.Bool("mock", false, "If in mock mode.")
 
-	log.Println("Starting", a)
+	mockServiceCount := flag.Int("mockServiceCount", 0, "service count to test, only used when --mock=true")
+
+	mockAvgEndpointCount := flag.Int("mockAvgEndpointCount", 20, "average endpoint count for every service, only used when --mock=true")
+
+	mockPushDelay := flag.Int64("mockPushDelay", 10, "push delay in seconds, only used when --mock=true")
+
+	flag.Parse()
+
+	mockParams := &common.MockParams{
+		Mocked:               *mocked,
+		MockServiceCount:     *mockServiceCount,
+		MockAvgEndpointCount: *mockAvgEndpointCount,
+		MockPushDelay:        *mockPushDelay,
+	}
+
+	a := service.NewService(*grpcAddr, *mockParams)
+
+	log.Println("Starting", a, "mock:", mockParams, "mocked:", *mocked)
 
 	_ = http.ListenAndServe(*httpAddr, nil)
 }

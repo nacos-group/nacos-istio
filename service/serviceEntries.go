@@ -35,15 +35,14 @@ func init() {
 // Called to request push of endpoints in ServiceEntry format
 func sePush(s *NacosMcpService, con *Connection, rtype string, res []string) error {
 	log.Println("SE request ", rtype, res)
-
-	r := &v1alpha1.Resources{}
-	r.Collection = ServiceEntriesType // must match
-
-	rs1, _ := convertServiceEntriesToResource("test2.nacos", getServiceFromNacos("test2"))
-
-	r.Resources = append(r.Resources, *rs1)
-
-	return s.Send(con, rtype, r)
+	//
+	//	//r := &v1alpha1.Resources{}
+	//	//r.Collection = ServiceEntriesType // must match
+	//	//
+	//	//rs1, _ := convertServiceEntriesToResource("test2.nacos", getServiceFromNacos("test2"))
+	//	//
+	//	//r.Resources = append(r.Resources, *rs1)
+	return s.Send(con, rtype, s.getAllResources())
 }
 
 // Called to request push of ClusterLoadAssignments (EDS) - same information, but in Envoy format
