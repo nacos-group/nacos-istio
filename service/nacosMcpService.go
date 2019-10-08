@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"istio.io/api/networking/v1alpha3"
 	"log"
 	"net"
 	"strconv"
@@ -137,14 +136,17 @@ func NewService(addr string, mockParams common.MockParams) *NacosMcpService {
 			return
 		}
 
-		if nacosMcpService.clients["-1"].LastRequestAcked == false {
-			log.Println("Last request not finished, ignore.")
-			return
+		for _, con := range nacosMcpService.clients {
+
+			if con.LastRequestAcked == false {
+				log.Println("Last request not finished, ignore.")
+				continue
+			}
+			con.LastRequestAcked = false
 		}
 
-		nacosMcpService.clients["-1"].LastRequestTime = time.Now().UnixNano() / 1000
-		nacosMcpService.clients["-1"].LastRequestAcked = false
 		nacosMcpService.SendAll(resources)
+
 	})
 
 	go nacosMcpService.grpcServer.Serve(lis)
@@ -216,6 +218,8 @@ func (mcps *mcpStream) Process(s *NacosMcpService, con *Connection, msg proto.Me
 		s.mutex.Unlock()
 
 		con.active = true
+
+		log.Println("activate new connection:", con)
 	}
 
 	rtype := req.Collection
@@ -256,14 +260,14 @@ func (mcps *mcpStream) Process(s *NacosMcpService, con *Connection, msg proto.Me
 			log.Println("Unmatching nonce ", req.ResponseNonce, lastNonce)
 		}
 	}
-	//
-	//// Blocking - read will continue
-	//err := s.push(con, rtype, nil)
-	//if err != nil {
-	//	// push failed - disconnect
-	//	log.Println("Closing connection ", err)
-	//	return err
-	//}
+
+	// Blocking - read will continue
+	err := s.push(con, rtype, nil)
+	if err != nil {
+		// push failed - disconnect
+		log.Println("Closing connection ", err)
+		return err
+	}
 
 	return nil
 }
@@ -294,6 +298,8 @@ func (s *NacosMcpService) EstablishResourceStream(mcps mcp.ResourceSource_Establ
 		if err != nil {
 			if status.Code(err) == codes.Canceled || err == io.EOF {
 				log.Println("ADS: %q %s terminated %v", con.PeerAddr, con.ConID, err)
+				// remove this connection:
+				delete(s.clients, con.ConID)
 				return nil
 			}
 			log.Println("ADS: %q %s terminated with errors %v", con.PeerAddr, con.ConID, err)
@@ -312,7 +318,6 @@ func (s *NacosMcpService) push(con *Connection, rtype string, res []string) erro
 	h, f := resourceHandler[rtype]
 	log.Println("push", rtype, f)
 	if !f {
-		// TODO: push some 'not found'
 		log.Println("Resource not found ", rtype)
 		r := &v1alpha1.Resources{}
 		r.Collection = rtype
@@ -362,7 +367,8 @@ func (fx *NacosMcpService) SendAll(r *v1alpha1.Resources) {
 
 	//log.Println("current clients", fx.clients)
 	for _, con := range fx.clients {
-		log.Println("sending resources", len(r.Resources), con.LastRequestTime)
+		con.LastRequestTime = time.Now().UnixNano() / 1000
+		log.Println("sending resources", len(r.Resources), con.LastRequestTime, con.ConID)
 		r.Nonce = fmt.Sprintf("%v", time.Now())
 		con.NonceSent[r.Collection] = r.Nonce
 		con.Stream.Send(r)
@@ -374,7 +380,7 @@ func (fx *NacosMcpService) Send(con *Connection, rtype string, r *v1alpha1.Resou
 	r.Nonce = fmt.Sprintf("%v", time.Now())
 	con.NonceSent[rtype] = r.Nonce
 
-	log.Println("sending resources", r)
+	//log.Println("sending resources", r)
 
 	return con.Stream.Send(r)
 }
@@ -385,38 +391,4 @@ func (s *NacosMcpService) connectionID(node string) string {
 	c := s.connectionNumber
 	s.mutex.Unlock()
 	return node + "-" + strconv.Itoa(int(c))
-}
-
-func getServiceFromNacos(name string) (sh map[string][]*v1alpha3.ServiceEntry) {
-
-	ports := map[string]uint32{
-		"http": uint32(80),
-	}
-
-	var endpoint = &v1alpha3.ServiceEntry_Endpoint{
-		Address: "1.2.3.4",
-		Ports:   ports,
-		Weight:  1,
-	}
-
-	port := &v1alpha3.Port{
-		Number:   80,
-		Protocol: "HTTP",
-		Name:     "http",
-	}
-
-	serviceEntry := &v1alpha3.ServiceEntry{
-		Hosts:      []string{name + ".nacos"},
-		Addresses:  []string{"1.2.3.4"},
-		Ports:      []*v1alpha3.Port{port},
-		Resolution: v1alpha3.ServiceEntry_DNS,
-		Endpoints:  []*v1alpha3.ServiceEntry_Endpoint{endpoint},
-		Location:   1,
-	}
-
-	sh = make(map[string][]*v1alpha3.ServiceEntry)
-
-	sh[name] = []*v1alpha3.ServiceEntry{serviceEntry}
-
-	return
 }

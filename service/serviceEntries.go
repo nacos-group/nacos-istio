@@ -34,7 +34,6 @@ func init() {
 
 // Called to request push of endpoints in ServiceEntry format
 func sePush(s *NacosMcpService, con *Connection, rtype string, res []string) error {
-	log.Println("SE request ", rtype, res)
 	//
 	//	//r := &v1alpha1.Resources{}
 	//	//r.Collection = ServiceEntriesType // must match
@@ -83,7 +82,7 @@ func (fx *NacosMcpService) ServiceEntriesUpdate(shard, hostname string, entry []
 
 	// TODO: remove the extra caching in coremodel
 
-	fx.SendAll(r)
+	//fx.SendAll(r)
 
 	return nil
 }

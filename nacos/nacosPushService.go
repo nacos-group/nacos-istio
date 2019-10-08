@@ -14,7 +14,6 @@ import (
 import "github.com/nacos-group/nacos-sdk-go/model"
 
 type NacosService interface {
-
 	// Subscribe all services changes in Nacos:
 	SubscribeAllServices(SubscribeCallback func(resources *v1alpha1.Resources, err error))
 
@@ -73,6 +72,20 @@ func (mockService *MockNacosService) constructServices() {
 
 	totalInstanceCount := 0
 
+	labels := make(map[string]string)
+	labels["p"] = "hessian2"
+	labels["ROUTE"] = "0"
+	labels["APP"] = "ump"
+	labels["st"] = "na62"
+	labels["v"] = "2.0"
+	labels["TIMEOUT"] = "3000"
+	labels["ih2"] = "y"
+	labels["mg"] = "ump2_searchhost"
+	labels["WRITE_MODE"] = "unit"
+	labels["CONNECTTIMEOUT"] = "1000"
+	labels["SERIALIZETYPE"] = "hessian"
+	labels["ut"] = "UNZBMIX25G"
+
 	for count := 0; count < mockService.MockParams.MockServiceCount; count++ {
 
 		svcName := "mock.service." + strconv.Itoa(count)
@@ -94,7 +107,9 @@ func (mockService *MockNacosService) constructServices() {
 			ip := fmt.Sprintf("%d.%d.%d.%d",
 				byte(i>>24), byte(i>>16), byte(i>>8), byte(i))
 
-			endpoint := &v1alpha3.ServiceEntry_Endpoint{}
+			endpoint := &v1alpha3.ServiceEntry_Endpoint{
+				Labels: labels,
+			}
 
 			endpoint.Address = ip
 			endpoint.Ports = map[string]uint32{
