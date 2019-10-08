@@ -19,6 +19,9 @@ Nacos integrate with Istio as a MCP server
 3. Restart Pilot.
 
 ## Run in mock mode
+
+This mode generates specified count of services with random names to test the function as well as the performance of MCP protocol with Pilot.
+
 ```./nacos-istio  --mock=true --mockServiceCount=100000 --mockPushDelay=30```
 
 * mockServiceCount: generated service count, the endpoint count is about 10 times of service count.
