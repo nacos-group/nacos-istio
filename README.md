@@ -4,6 +4,7 @@ Nacos integrate with Istio as a MCP server
 
 
 ## Build
+* Linux 
 ```CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build nacos-istio.go```
 
 ## Configure this MCP server in Istio
