@@ -1,8 +1,6 @@
 package service
 
 import (
-	"../common"
-	"../nacos"
 	"context"
 	"errors"
 	"fmt"
@@ -12,6 +10,9 @@ import (
 	"strconv"
 	"sync"
 	"time"
+
+	"github.com/nacos-group/nacos-istio/common"
+	"github.com/nacos-group/nacos-istio/nacos"
 
 	ads "github.com/envoyproxy/go-control-plane/envoy/service/discovery/v2"
 	"github.com/gogo/protobuf/proto"
