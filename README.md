@@ -27,7 +27,7 @@ This mode generates specified count of services with random names to test the fu
 
 * mock: if use mock mode.
 * mockServiceCount: generated service count, the endpoint count is about 10 times of service count.
-* mockAvgEndpointCount: average endpoint count of each service.
+* mockAvgEndpointCount: average endpoint count of each service (0.0.1% of the services will each have 20000 endpoints).
 * mockPushDelay: the interval in seconds between each service entry push to Pilot.
 * mockServiceNamePrefix: service name prefix.
 
