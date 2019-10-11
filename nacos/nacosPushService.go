@@ -154,6 +154,6 @@ func (mockService *MockNacosService) notifyServiceChange() {
 			go callback(mockService.Resources, nil)
 		}
 
-		time.Sleep(time.Duration(mockService.MockParams.MockPushDelay) * time.Second)
+		time.Sleep(time.Duration(mockService.MockParams.MockPushDelay) * time.Millisecond)
 	}
 }
