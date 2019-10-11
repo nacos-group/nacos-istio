@@ -1,11 +1,12 @@
 package main
 
 import (
-	"./common"
-	"./service"
 	"flag"
 	"log"
 	"net/http"
+
+	"github.com/nacos-group/nacos-istio/common"
+	"github.com/nacos-group/nacos-istio/service"
 )
 
 var (
