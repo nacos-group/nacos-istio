@@ -1,17 +1,18 @@
 package nacos
 
 import (
-	"../common"
 	"fmt"
-	"github.com/gogo/protobuf/types"
-	"istio.io/api/mcp/v1alpha1"
-	"istio.io/api/networking/v1alpha3"
 	"log"
 	"math/rand"
 	"strconv"
 	"time"
+
+	"github.com/gogo/protobuf/types"
+	"github.com/nacos-group/nacos-istio/common"
+	"github.com/nacos-group/nacos-sdk-go/model"
+	"istio.io/api/mcp/v1alpha1"
+	"istio.io/api/networking/v1alpha3"
 )
-import "github.com/nacos-group/nacos-sdk-go/model"
 
 type NacosService interface {
 	// Subscribe all services changes in Nacos:
