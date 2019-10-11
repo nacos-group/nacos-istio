@@ -139,14 +139,17 @@ func NewService(addr string, mockParams common.MockParams) *NacosMcpService {
 		for _, con := range nacosMcpService.clients {
 
 			if con.LastRequestAcked == false {
-				log.Println("Last request not finished, ignore.")
+				//log.Println("Last request not finished, ignore.")
 				continue
 			}
 			con.LastRequestAcked = false
+
+			con.LastRequestTime = time.Now().UnixNano() / 1000
+			log.Println("sending resources count:", len(resources.Resources), ", size:", nacosMcpService.sizeOfResources(resources), ", request time:", con.LastRequestTime, ", connection id:", con.ConID)
+			resources.Nonce = fmt.Sprintf("%v", time.Now())
+			con.NonceSent[resources.Collection] = resources.Nonce
+			_ = con.Stream.Send(resources)
 		}
-
-		nacosMcpService.SendAll(resources)
-
 	})
 
 	go nacosMcpService.grpcServer.Serve(lis)
@@ -170,6 +173,7 @@ type mcpStream struct {
 }
 
 func (mcps *mcpStream) Send(p proto.Message) error {
+
 	if mp, ok := p.(*mcp.Resources); ok {
 		return mcps.stream.Send(mp)
 	}
@@ -247,13 +251,16 @@ func (mcps *mcpStream) Process(s *NacosMcpService, con *Connection, msg proto.Me
 
 		if lastNonce == req.ResponseNonce {
 
-			log.Println("ACK of:", con.LastRequestTime, " used time(microsecond):", time.Now().UnixNano()/1000-con.LastRequestTime, "\n")
-			con.LastRequestAcked = true
+			if rtype == ServiceEntriesType {
+				log.Println("ACK of:", con.LastRequestTime, " used time(microsecond):", time.Now().UnixNano()/1000-con.LastRequestTime, "\n")
+				con.LastRequestAcked = true
 
-			acks.With(prometheus.Labels{"type": rtype}).Add(1)
-			con.mu.Lock()
-			con.NonceAcked[rtype] = req.ResponseNonce
-			con.mu.Unlock()
+				acks.With(prometheus.Labels{"type": rtype}).Add(1)
+				con.mu.Lock()
+				con.NonceAcked[rtype] = req.ResponseNonce
+				con.mu.Unlock()
+			}
+
 			return nil
 		} else {
 			// will resent the resource, set the nonce - next response should be ok.
@@ -261,11 +268,16 @@ func (mcps *mcpStream) Process(s *NacosMcpService, con *Connection, msg proto.Me
 		}
 	}
 
+	if rtype == ServiceEntriesType {
+		return nil
+	}
+
 	// Blocking - read will continue
 	err := s.push(con, rtype, nil)
 	if err != nil {
 		// push failed - disconnect
-		log.Println("Closing connection ", err)
+		log.Println("Closing connection ", con.ConID, err)
+		delete(s.clients, con.ConID)
 		return err
 	}
 
@@ -315,16 +327,16 @@ func (s *NacosMcpService) EstablishResourceStream(mcps mcp.ResourceSource_Establ
 
 // Push a single resource type on the connection. This is blocking.
 func (s *NacosMcpService) push(con *Connection, rtype string, res []string) error {
-	h, f := resourceHandler[rtype]
-	log.Println("push", rtype, f)
-	if !f {
-		log.Println("Resource not found ", rtype)
-		r := &v1alpha1.Resources{}
-		r.Collection = rtype
-		_ = s.Send(con, rtype, r)
-		return nil
-	}
-	return h(s, con, rtype, res)
+	//h, f := resourceHandler[rtype]
+	//log.Println("push", rtype, f)
+	//if !f {
+	log.Println("Resource not found ", rtype)
+	r := &v1alpha1.Resources{}
+	r.Collection = rtype
+	_ = s.Send(con, rtype, r)
+	return nil
+	//}
+	//return h(s, con, rtype, res)
 }
 
 // IncrementalAggregatedResources is not implemented.
@@ -363,25 +375,18 @@ func (s *NacosMcpService) grpcServerOptions() []grpc.ServerOption {
 	return grpcOptions
 }
 
-func (fx *NacosMcpService) SendAll(r *v1alpha1.Resources) {
+func (fx *NacosMcpService) sizeOfResources(r *v1alpha1.Resources) int64 {
 
-	//log.Println("current clients", fx.clients)
-	for _, con := range fx.clients {
-		con.LastRequestTime = time.Now().UnixNano() / 1000
-		log.Println("sending resources", len(r.Resources), con.LastRequestTime, con.ConID)
-		r.Nonce = fmt.Sprintf("%v", time.Now())
-		con.NonceSent[r.Collection] = r.Nonce
-		con.Stream.Send(r)
+	var length = 0
+	for _, rs := range r.Resources {
+		length = length + len(rs.Body.Value)
 	}
-
+	return int64(length)
 }
 
 func (fx *NacosMcpService) Send(con *Connection, rtype string, r *v1alpha1.Resources) error {
 	r.Nonce = fmt.Sprintf("%v", time.Now())
 	con.NonceSent[rtype] = r.Nonce
-
-	//log.Println("sending resources", r)
-
 	return con.Stream.Send(r)
 }
 

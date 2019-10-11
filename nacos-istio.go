@@ -26,13 +26,16 @@ func main() {
 
 	mockPushDelay := flag.Int64("mockPushDelay", 10, "push delay in seconds, only used when --mock=true")
 
+	mockServiceNamePrefix := flag.String("mockServiceNamePrefix", "mock.service", "mock service name prefix")
+
 	flag.Parse()
 
 	mockParams := &common.MockParams{
-		Mocked:               *mocked,
-		MockServiceCount:     *mockServiceCount,
-		MockAvgEndpointCount: *mockAvgEndpointCount,
-		MockPushDelay:        *mockPushDelay,
+		Mocked:                *mocked,
+		MockServiceCount:      *mockServiceCount,
+		MockAvgEndpointCount:  *mockAvgEndpointCount,
+		MockPushDelay:         *mockPushDelay,
+		MockServiceNamePrefix: *mockServiceNamePrefix,
 	}
 
 	a := service.NewService(*grpcAddr, *mockParams)

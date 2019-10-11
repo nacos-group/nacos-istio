@@ -88,17 +88,22 @@ func (mockService *MockNacosService) constructServices() {
 
 	for count := 0; count < mockService.MockParams.MockServiceCount; count++ {
 
-		svcName := "mock.service." + strconv.Itoa(count)
+		svcName := mockService.MockParams.MockServiceNamePrefix + "." + strconv.Itoa(count)
 		se := &v1alpha3.ServiceEntry{
 			Hosts:      []string{svcName + ".nacos"},
-			Resolution: v1alpha3.ServiceEntry_DNS,
+			Resolution: v1alpha3.ServiceEntry_STATIC,
 			Location:   1,
 			Ports:      []*v1alpha3.Port{port},
 		}
 
 		rand.Seed(time.Now().Unix())
 
-		instanceCount := rand.Intn(mockService.MockParams.MockAvgEndpointCount) + mockService.MockParams.MockAvgEndpointCount/2
+		instanceCount := rand.Intn(10) + mockService.MockParams.MockAvgEndpointCount - 10
+
+		//0.01% of the services have large number of endpoints:
+		if count%10000 == 0 {
+			instanceCount = 20000
+		}
 
 		totalInstanceCount += instanceCount
 
@@ -142,15 +147,10 @@ func (mockService *MockNacosService) constructServices() {
 }
 
 func (mockService *MockNacosService) notifyServiceChange() {
-	//
-	//resources := &v1alpha1.Resources{
-	//	Collection: "istio/networking/v1alpha3/serviceentries",
-	//}
-
 	for {
 
 		for _, callback := range mockService.callbacks {
-			callback(mockService.Resources, nil)
+			go callback(mockService.Resources, nil)
 		}
 
 		time.Sleep(time.Duration(mockService.MockParams.MockPushDelay) * time.Second)
