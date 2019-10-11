@@ -146,7 +146,8 @@ func NewService(addr string, mockParams common.MockParams) *NacosMcpService {
 			con.LastRequestAcked = false
 
 			con.LastRequestTime = time.Now().UnixNano() / 1000
-			log.Println("sending resources count:", len(resources.Resources), ", size:", nacosMcpService.sizeOfResources(resources), ", request time:", con.LastRequestTime, ", connection id:", con.ConID)
+			log.Println("sending resources count:", len(resources.Resources), ", size:", nacosMcpService.sizeOfResources(resources),
+				", request time:", con.LastRequestTime, ", connection id:", con.ConID)
 			resources.Nonce = fmt.Sprintf("%v", time.Now())
 			con.NonceSent[resources.Collection] = resources.Nonce
 			_ = con.Stream.Send(resources)
@@ -269,6 +270,7 @@ func (mcps *mcpStream) Process(s *NacosMcpService, con *Connection, msg proto.Me
 		}
 	}
 
+	// Don't response a service entry query:
 	if rtype == ServiceEntriesType {
 		return nil
 	}
