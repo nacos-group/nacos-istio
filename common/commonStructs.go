@@ -6,4 +6,5 @@ type MockParams struct {
 	MockAvgEndpointCount  int
 	MockPushDelay         int64
 	MockServiceNamePrefix string
+	MockTestIncremental   bool
 }

@@ -151,9 +151,91 @@ func (mockService *MockNacosService) notifyServiceChange() {
 	for {
 
 		for _, callback := range mockService.callbacks {
-			go callback(mockService.Resources, nil)
+			if mockService.MockParams.MockTestIncremental {
+				go callback(mockService.generateIncrementalService(), nil)
+			} else {
+				go callback(mockService.Resources, nil)
+			}
 		}
-
 		time.Sleep(time.Duration(mockService.MockParams.MockPushDelay) * time.Millisecond)
 	}
+}
+
+func (mockService *MockNacosService) generateIncrementalService() (rss *v1alpha1.Resources) {
+
+	port := &v1alpha3.Port{
+		Number:   8080,
+		Protocol: "HTTP",
+		Name:     "http",
+	}
+
+	totalInstanceCount := 0
+
+	labels := make(map[string]string)
+	labels["p"] = "hessian2"
+	labels["ROUTE"] = "0"
+	labels["APP"] = "ump"
+	labels["st"] = "na62"
+	labels["v"] = "2.0"
+	labels["TIMEOUT"] = "3000"
+	labels["ih2"] = "y"
+	labels["mg"] = "ump2_searchhost"
+	labels["WRITE_MODE"] = "unit"
+	labels["CONNECTTIMEOUT"] = "1000"
+	labels["SERIALIZETYPE"] = "hessian"
+	labels["ut"] = "UNZBMIX25G"
+
+	rand.Seed(time.Now().Unix())
+	svcName := mockService.MockParams.MockServiceNamePrefix + "." + strconv.Itoa(rand.Intn(1000000))
+	se := &v1alpha3.ServiceEntry{
+		Hosts:      []string{svcName + ".nacos"},
+		Resolution: v1alpha3.ServiceEntry_STATIC,
+		Location:   1,
+		Ports:      []*v1alpha3.Port{port},
+	}
+
+	instanceCount := 10
+
+	totalInstanceCount += instanceCount
+
+	for i := 0; i < instanceCount; i++ {
+
+		ip := fmt.Sprintf("%d.%d.%d.%d",
+			byte(i>>24), byte(i>>16), byte(i>>8), byte(i))
+
+		endpoint := &v1alpha3.ServiceEntry_Endpoint{
+			Labels: labels,
+		}
+
+		endpoint.Address = ip
+		endpoint.Ports = map[string]uint32{
+			"http": uint32(8080),
+		}
+
+		se.Endpoints = append(se.Endpoints, endpoint)
+	}
+
+	seAny, err := types.MarshalAny(se)
+	if err != nil {
+		return nil
+	}
+
+	res := v1alpha1.Resource{
+		Body: seAny,
+		Metadata: &v1alpha1.Metadata{
+			Annotations: map[string]string{
+				"virtual": "1",
+			},
+			Name: "nacos" + "/" + svcName, // goes to model.Config.Name and Namespace - of course different syntax
+		},
+	}
+
+	rss = &v1alpha1.Resources{
+		Collection:  "istio/networking/v1alpha3/serviceentries",
+		Incremental: true,
+	}
+
+	rss.Resources = append(rss.Resources, res)
+
+	return rss
 }
