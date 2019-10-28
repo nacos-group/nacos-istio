@@ -33,4 +33,4 @@ This mode generates specified count of services with random names to test the fu
 
 ## Run in real mode
 
-to be implemented.
+Nacos MCP Server has been implemented as a builtin server of Nacos in Nacos 1.1.4, please see the code in https://github.com/alibaba/nacos/tree/develop/istio
