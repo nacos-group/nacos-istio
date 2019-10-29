@@ -31,6 +31,8 @@ func main() {
 
 	mockTestIncremental := flag.Bool("mockTestIncremental", false, "mock service is incremental")
 
+	mockIncrementalRatio := flag.Int("mockIncrementalRatio", 0, "ratio of incremental push services")
+
 	flag.Parse()
 
 	mockParams := &common.MockParams{
@@ -40,6 +42,7 @@ func main() {
 		MockPushDelay:         *mockPushDelay,
 		MockServiceNamePrefix: *mockServiceNamePrefix,
 		MockTestIncremental:   *mockTestIncremental,
+		MockIncrementalRatio:  *mockIncrementalRatio,
 	}
 
 	a := service.NewService(*grpcAddr, *mockParams)
