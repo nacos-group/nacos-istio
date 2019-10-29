@@ -61,8 +61,17 @@ func (mockService *MockNacosService) SubscribeService(ServiceName string, Subscr
  */
 func (mockService *MockNacosService) constructServices() {
 
+	collection := "istio/networking/v1alpha3/serviceentries"
+	incremental := false
+
+	if mockService.MockParams.MockTestIncremental {
+		collection = "istio/networking/v1alpha3/synthetic/serviceentries"
+		incremental = true
+	}
+
 	mockService.Resources = &v1alpha1.Resources{
-		Collection: "istio/networking/v1alpha3/serviceentries",
+		Collection:  collection,
+		Incremental: incremental,
 	}
 
 	port := &v1alpha3.Port{
@@ -93,7 +102,7 @@ func (mockService *MockNacosService) constructServices() {
 		se := &v1alpha3.ServiceEntry{
 			Hosts:      []string{svcName + ".nacos"},
 			Resolution: v1alpha3.ServiceEntry_STATIC,
-			Location:   1,
+			Location:   v1alpha3.ServiceEntry_MESH_INTERNAL,
 			Ports:      []*v1alpha3.Port{port},
 		}
 

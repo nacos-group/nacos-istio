@@ -137,6 +137,13 @@ func NewService(addr string, mockParams common.MockParams) *NacosMcpService {
 			return
 		}
 
+		// For incremental push, always update endpoint version for all services:
+		if nacosMcpService.nacosPushService.MockParams.MockTestIncremental {
+			for _, resource := range resources.Resources {
+				resource.Metadata.Annotations["networking.alpha.istio.io/endpointsVersion"] = strconv.FormatInt(time.Now().UnixNano()/1000, 10)
+			}
+		}
+
 		for _, con := range nacosMcpService.clients {
 
 			if con.LastRequestAcked == false {
