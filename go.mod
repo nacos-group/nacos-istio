@@ -7,10 +7,8 @@ require (
 	github.com/gogo/protobuf v1.3.0
 	github.com/grpc-ecosystem/go-grpc-middleware v1.1.0
 	github.com/grpc-ecosystem/go-grpc-prometheus v1.2.0
-	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
-	github.com/modern-go/reflect2 v1.0.1 // indirect
 	github.com/nacos-group/nacos-sdk-go v0.0.0-20190820112454-5245ea3cded6
-	github.com/prometheus/client_golang v1.1.0
+	github.com/prometheus/client_golang v1.11.1
 	google.golang.org/grpc v1.24.0
 	istio.io/api v0.0.0-20191010041835-891d7f9d3d28
 )
